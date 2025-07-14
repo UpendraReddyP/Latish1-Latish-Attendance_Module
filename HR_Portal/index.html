@@ -155,7 +155,7 @@
             letter-spacing: 0.05em;
             border-bottom: 2px solid #e2e8f0;
         }
-
+[O
         .employee-table tr {
             transition: all 0.3s ease;
         }
@@ -602,447 +602,435 @@
     </div>
 
     <script>
-const API_BASE_URL = 'http://3.87.225.158:3067/api';
+        const API_BASE_URL = 'http://3.87.225.158:3067/api';
 
-// Calculate duration between in-time and out-time
-function calculateDuration(inTime, outTime) {
-    if (!inTime || !outTime) return 'N/A';
+        // Calculate duration between in-time and out-time
+        function calculateDuration(inTime, outTime) {
+            if (!inTime || !outTime) return 'N/A';
 
-    const parseTime = (timeStr) => {
-        // Assuming backend returns time in "HH:MM:SS" (24-hour) format
-        const [hours, minutes, seconds] = timeStr.split(':').map(Number);
-        const period = hours >= 12 ? 'PM' : 'AM';
-        const adjustedHours = hours % 12 || 12; // Convert 0 to 12 for midnight
-        const time = `${adjustedHours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        let [hrs, mins, secs] = time.split(':').map(Number);
-        if (period === 'PM' && hrs !== 12) hrs += 12;
-        if (period === 'AM' && hrs === 12) hrs = 0;
-        const date = new Date();
-        date.setHours(hrs, mins, secs, 0);
-        return date;
-    };
+            const parseTime = (timeStr) => {
+                // Assuming backend returns time in "HH:MM:SS" (24-hour) format
+                const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const adjustedHours = hours % 12 || 12; // Convert 0 to 12 for midnight
+                const time = `${adjustedHours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                let [hrs, mins, secs] = time.split(':').map(Number);
+                if (period === 'PM' && hrs !== 12) hrs += 12;
+                if (period === 'AM' && hrs === 12) hrs = 0;
+                const date = new Date();
+                date.setHours(hrs, mins, secs, 0);
+                return date;
+            };
 
-    try {
-        const inDate = parseTime(inTime);
-        const outDate = parseTime(outTime);
+            try {
+                const inDate = parseTime(inTime);
+                const outDate = parseTime(outTime);
 
-        let diffMs = outDate - inDate;
+                let diffMs = outDate - inDate;
 
-        if (diffMs < 0) {
-            diffMs += 24 * 60 * 60 * 1000; // Handle overnight shifts
+                if (diffMs < 0) {
+                    diffMs += 24 * 60 * 60 * 1000; // Handle overnight shifts
+                }
+
+                const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                const hours = Math.floor(diffMinutes / 60);
+                const minutes = diffMinutes % 60;
+
+                if (isNaN(hours) || isNaN(minutes)) return '0h 0m 0s';
+                return hours >= 4 ? `${hours}h ${minutes}m` : 'NaN';
+            } catch (e) {
+                console.error('Error parsing time:', e);
+                return '0h 0m 0s';
+            }
         }
 
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        const hours = Math.floor(diffMinutes / 60);
-        const minutes = diffMinutes % 60;
+        // Format hours worked for view details to always show hours and minutes
+        function formatHoursWorkedForDetails(hoursWorked) {
+            // Ensure hoursWorked is a string before attempting string methods
+            hoursWorked = String(hoursWorked); // **THIS IS THE CRITICAL LINE FOR THE FIX**
 
-        if (isNaN(hours) || isNaN(minutes)) return '0h 0m 0s';
-        return hours >= 4 ? `${hours}h ${minutes}m` : 'NaN';
-    } catch (e) {
-        console.error('Error parsing time:', e);
-        return '0h 0m 0s';
-    }
-}
+            if (hoursWorked === 'N/A' || hoursWorked === '0h 0m 0s' || hoursWorked === 'NaN') {
+                return '0h 0m';
+            }
 
-// Format hours worked for view details to always show hours and minutes
-function formatHoursWorkedForDetails(hoursWorked) {
-    if (hoursWorked === 'N/A' || hoursWorked === '0h 0m 0s' || hoursWorked === 'NaN') {
-        return '0h 0m';
-    }
+            // Extract hours and minutes using a more robust method
+            const matches = hoursWorked.match(/(\d+)h\s*(\d+)m/);
+            if (matches) {
+                const hours = parseInt(matches[1], 10) || 0;
+                const minutes = parseInt(matches[2], 10) || 0;
+                return `${hours}h ${minutes}m`;
+            }
 
-    // Extract hours and minutes using a more robust method
-    const matches = hoursWorked.match(/(\d+)h\s*(\d+)m/);
-    if (matches) {
-        const hours = parseInt(matches[1], 10) || 0;
-        const minutes = parseInt(matches[2], 10) || 0;
-        return `${hours}h ${minutes}m`;
-    }
+            // Fallback: try to split and parse manually if regex doesn't match
+            const parts = hoursWorked.split('h');
+            const hours = parseInt(parts[0], 10) || 0;
+            const minutesPart = parts[1] ? parts[1].replace('m', '').trim() : '0';
+            const minutes = parseInt(minutesPart, 10) || 0;
 
-    // Fallback: try to split and parse manually
-    const parts = hoursWorked.split('h');
-    const hours = parseInt(parts[0], 10) || 0;
-    const minutesPart = parts[1] ? parts[1].replace('m', '').trim() : '0';
-    const minutes = parseInt(minutesPart, 10) || 0;
-
-    return `${hours}h ${minutes}m`;
-}
-
-// Format date to remove zonal time (e.g., "2025-05-12" instead of "2025-05-12T00:00:00.000Z")
-function formatDate(dateStr) {
-    if (!dateStr) return 'N/A';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr; // Return original if invalid
-    return date.toLocaleDateString('en-CA'); // Returns "YYYY-MM-DD"
-}
-
-// Get day of the week from date string
-function getDayName(dateStr) {
-    if (!dateStr) return 'N/A';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleDateString('en-US', { weekday: 'long' });
-}
-
-// Get attendance status based on hours worked
-function getAttendanceStatus(hoursWorked) {
-    if (hoursWorked === 'NaN' || hoursWorked === 'N/A' || hoursWorked === '0h 0m 0s') return 'Absent';
-    if (hoursWorked === 'In Progress') return 'Pending';
-    const hours = parseFloat(hoursWorked.split('h ')[0]) || 0;
-    if (hours >= 8) return 'Present';
-    if (hours >= 4) return 'Half-Day';
-    return 'Absent';
-}
-
-// Generate attendance badge HTML
-function getAttendanceBadgeHTML(status) {
-    let badgeClass = '';
-    switch (status.toLowerCase()) {
-        case 'present':
-            badgeClass = 'status-present';
-            break;
-        case 'half-day':
-            badgeClass = 'status-half-day';
-            break;
-        case 'absent':
-            badgeClass = 'status-absent';
-            break;
-        case 'pending':
-            badgeClass = 'status-pending';
-            break;
-        default:
-            badgeClass = 'status-pending';
-    }
-    return `<span class="attendance-badge ${badgeClass}">${status}</span>`;
-}
-
-// Show employee details
-async function showEmployeeDetail(employeeId) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/records?employeeId=${employeeId}`);
-        if (!response.ok) throw new Error('Failed to fetch records');
-        const records = await response.json();
-
-        if (records.length === 0) {
-            document.getElementById('employeeDetailContent').innerHTML = `
-                <div class="no-records">
-                    <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.95-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="12" y1="9" x2="12" y2="13"></line>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    No Records Found
-                </div>
-            `;
-            document.getElementById('employeeDetailOverlay').classList.add('active');
-            document.body.style.overflow = 'hidden';
-            return;
+            return `${hours}h ${minutes}m`;
         }
 
-        const dayRecords = new Map();
-        records.forEach(record => {
-            const date = formatDate(record.date);
-            if (!dayRecords.has(date)) {
-                dayRecords.set(date, {
-                    date,
-                    day: getDayName(record.date),
-                    inTime: null,
-                    outTime: null,
-                    hoursWorked: record.hours_worked || null,
-                    attendanceStatus: record.attendance_status || null
+        // Format date to remove zonal time (e.g., "2025-05-12" instead of "2025-05-12T00:00:00.000Z")
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr; // Return original if invalid
+            return date.toLocaleDateString('en-CA'); // Returns "YYYY-MM-DD"
+        }
+
+        // Get day of the week from date string
+        function getDayName(dateStr) {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return 'N/A';
+            return date.toLocaleDateString('en-US', { weekday: 'long' });
+        }
+
+        // Get attendance status based on hours worked
+        function getAttendanceStatus(hoursWorked) {
+            // Ensure hoursWorked is a string here too, for consistency and safety
+            hoursWorked = String(hoursWorked);
+
+            if (hoursWorked === 'NaN' || hoursWorked === 'N/A' || hoursWorked === '0h 0m 0s') return 'Absent';
+            if (hoursWorked === 'In Progress') return 'Pending';
+            
+            // Extract hours safely
+            const hoursMatch = hoursWorked.match(/(\d+)h/);
+            const hours = hoursMatch ? parseFloat(hoursMatch[1]) : 0;
+
+            if (hours >= 8) return 'Present';
+            if (hours >= 4) return 'Half-Day';
+            return 'Absent';
+        }
+
+        // Generate attendance badge HTML
+        function getAttendanceBadgeHTML(status) {
+            let badgeClass = '';
+            switch (status.toLowerCase()) {
+                case 'present':
+                    badgeClass = 'status-present';
+                    break;
+                case 'half-day':
+                    badgeClass = 'status-half-day';
+                    break;
+                case 'absent':
+                    badgeClass = 'status-absent';
+                    break;
+                case 'pending':
+                    badgeClass = 'status-pending';
+                    break;
+                default:
+                    badgeClass = 'status-pending';
+            }
+            return `<span class="attendance-badge ${badgeClass}">${status}</span>`;
+        }
+
+        // Show employee details
+        async function showEmployeeDetail(employeeId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/records?employeeId=${employeeId}`);
+                if (!response.ok) throw new Error('Failed to fetch records');
+                const records = await response.json();
+
+                if (records.length === 0) {
+                    document.getElementById('employeeDetailContent').innerHTML = `
+                        <div class="no-records">
+                            <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.95-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            No Records Found
+                        </div>
+                    `;
+                    document.getElementById('employeeDetailOverlay').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                    return;
+                }
+
+                const dayRecords = new Map();
+                records.forEach(record => {
+                    const date = formatDate(record.date);
+                    if (!dayRecords.has(date)) {
+                        dayRecords.set(date, {
+                            date,
+                            day: getDayName(record.date),
+                            inTime: null,
+                            outTime: null,
+                            hoursWorked: record.hours_worked || null,
+                            attendanceStatus: record.attendance_status || null
+                        });
+                    }
+                    const dayRecord = dayRecords.get(date);
+                    if (record.status === 'in') {
+                        dayRecord.inTime = record.timestamp;
+                    } else if (record.status === 'out') {
+                        dayRecord.outTime = record.timestamp;
+                    }
                 });
+
+                dayRecords.forEach(record => {
+                    if (record.inTime && record.outTime && !record.hoursWorked) {
+                        const duration = calculateDuration(record.inTime, record.outTime);
+                        record.hoursWorked = duration !== 'N/A' ? duration : '0h 0m 0s';
+                        record.attendanceStatus = getAttendanceStatus(duration);
+                    } else if (!record.hoursWorked) {
+                        record.hoursWorked = '0h 0m 0s';
+                        record.attendanceStatus = getAttendanceStatus('N/A');
+                    }
+                });
+
+                document.getElementById('employeeDetailContent').innerHTML = `
+                    <div class="info-row">
+                        <div class="info-item">
+                            <div class="info-label">Employee ID</div>
+                            <div class="info-value">${employeeId}</div>
+                        </div>
+                    </div>
+                    <h3 style="margin: 2rem 0 1rem;">Attendance Records</h3>
+                    ${Array.from(dayRecords.values()).reverse().map(record => `
+                        <div class="time-record">
+                            <div>
+                                <div class="time-label">Date</div>
+                                <div class="time-value">${record.date}</div>
+                            </div>
+                            <div>
+                                <div class="time-label">Day</div>
+                                <div class="time-value">${record.day}</div>
+                            </div>
+                            <div>
+                                <div class="time-label">Punch In</div>
+                                <div class="time-value">${record.inTime || 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div class="time-label">Punch Out</div>
+                                <div class="time-value">${record.outTime || 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div class="time-label">Hours Worked</div>
+                                <div class="time-value">${formatHoursWorkedForDetails(record.hoursWorked)}</div>
+                            </div>
+                            <div>
+                                <div class="time-label">Attendance</div>
+                                <div class="time-value">${getAttendanceBadgeHTML(record.attendanceStatus)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                `;
+
+                document.getElementById('employeeDetailOverlay').classList.add('active');
+                document.body.style.overflow = 'hidden';
+            } catch (err) {
+                console.error('Error fetching employee details:', err);
+                alert('Failed to load employee details. Please try again.');
             }
-            const dayRecord = dayRecords.get(date);
-            if (record.status === 'in') {
-                dayRecord.inTime = record.timestamp;
-            } else if (record.status === 'out') {
-                dayRecord.outTime = record.timestamp;
+        }
+
+        // Hide employee detail overlay
+        function hideEmployeeDetail() {
+            document.getElementById('employeeDetailOverlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Get latest status for an employee
+        async function getLatestEmployeeStatus(employeeId, date) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/records?employeeId=${employeeId}&date=${formatDate(date)}`);
+                if (!response.ok) throw new Error('Failed to fetch records');
+                const records = await response.json();
+
+                if (records.length === 0) return null;
+
+                records.sort((a, b) => {
+                    const timeA = new Date(`1970-01-01T${a.timestamp}Z`).getTime();
+                    const timeB = new Date(`1970-01-01T${b.timestamp}Z`).getTime();
+                    return timeB - timeA;
+                });
+
+                const latestRecord = records[0];
+                const result = {
+                    id: employeeId,
+                    status: latestRecord.status,
+                    lastUpdate: latestRecord.timestamp,
+                    date: formatDate(date),
+                    hoursWorked: 'In Progress',
+                    attendanceStatus: 'Pending'
+                };
+
+                const punchInRecord = records.find(r => r.status === 'in');
+                const punchOutRecord = records.find(r => r.status === 'out');
+
+                if (punchInRecord && punchOutRecord) {
+                    const duration = calculateDuration(punchInRecord.timestamp, punchOutRecord.timestamp);
+                    result.hoursWorked = duration !== 'N/A' ? duration : '0h 0m 0s';
+                    result.attendanceStatus = getAttendanceStatus(duration);
+                } else if (!punchInRecord && !punchOutRecord) {
+                    result.hoursWorked = '0h 0m 0s';
+                    result.attendanceStatus = 'Absent';
+                }
+
+                return result;
+            } catch (err) {
+                console.error('Error fetching status:', err);
+                return null;
             }
-        });
+        }
 
-        dayRecords.forEach(record => {
-            if (record.inTime && record.outTime && !record.hoursWorked) {
-                const duration = calculateDuration(record.inTime, record.outTime);
-                record.hoursWorked = duration !== 'N/A' ? duration : '0h 0m 0s';
-                record.attendanceStatus = getAttendanceStatus(duration);
-            } else if (!record.hoursWorked) {
-                record.hoursWorked = '0h 0m 0s';
-                record.attendanceStatus = getAttendanceStatus('N/A');
+        // Toggle select all checkboxes
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.record-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        }
+
+        // Update employee table
+        async function updateEmployeeTable() {
+            const searchQuery = document.getElementById('searchInput').value.trim();
+            const today = new Date().toLocaleDateString('en-CA');
+            const tableBody = document.getElementById('employeeTableBody');
+
+            try {
+                // Construct API URL with employeeId filter if searchQuery exists
+                const url = searchQuery
+                    ? `${API_BASE_URL}/records?employeeId=${encodeURIComponent(searchQuery)}`
+                    : `${API_BASE_URL}/records`;
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to fetch records');
+                }
+                const records = await response.json();
+
+                // If no records are returned, show "No Records Found"
+                if (records.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="no-records">
+                                <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.95-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                                No Records Found
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('selectAll').checked = false;
+                    return;
+                }
+
+                // Get unique employee IDs
+                const employeeIds = [...new Set(records.map(record => record.employee_id))];
+                const latestRecords = [];
+
+                // Fetch latest status for each employee
+                for (const id of employeeIds) {
+                    const status = await getLatestEmployeeStatus(id, today);
+                    if (status) latestRecords.push(status);
+                }
+
+                // Sort records by employee ID for consistency
+                latestRecords.sort((a, b) => a.id.localeCompare(b.id));
+
+                // Render table rows
+                tableBody.innerHTML = latestRecords.map(record => `
+                    <tr>
+                        <td class="checkbox-cell"><input type="checkbox" class="record-checkbox select-checkbox" data-id="${record.id}"></td>
+                        <td>${record.id}</td>
+                        <td><span class="status-badge ${record.status === 'in' ? 'status-in' : 'status-out'}">
+                            ${record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                        </span></td>
+                        <td>${getAttendanceBadgeHTML(record.attendanceStatus)}</td>
+                        <td>${record.lastUpdate}</td>
+                        <td>${record.hoursWorked}</td>
+                        <td>
+                            <button class="view-button" onclick="showEmployeeDetail('${record.id}')">
+                                <svg class="view-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Update select all checkbox
+                const checkboxes = document.querySelectorAll('.record-checkbox');
+                const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+                document.getElementById('selectAll').checked = allChecked;
+            } catch (err) {
+                console.error('Error updating table:', err);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="no-records">
+                            <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.95-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            ${err.message || 'Error Loading Records'}
+                        </td>
+                    </tr>
+                `;
             }
+        }
+
+        // Show modal for clearing records
+        function showModal() {
+            const selectedCheckboxes = document.querySelectorAll('.record-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert("Please select at least one record to delete.");
+                return;
+            }
+            const confirmClear = confirm(`Are you sure you want to permanently delete ${selectedCheckboxes.length} selected record(s)?`);
+            if (confirmClear) {
+                clearSelectedRecords();
+            }
+        }
+
+        // Clear selected records
+        async function clearSelectedRecords() {
+            const selectedCheckboxes = document.querySelectorAll('.record-checkbox:checked');
+            const employeeIdsToDelete = Array.from(selectedCheckboxes).map(cb => cb.dataset.id);
+
+            if (employeeIdsToDelete.length === 0) {
+                alert("No records selected for deletion.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/clear-records`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ employeeIds: employeeIdsToDelete }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to clear records.');
+                }
+
+                alert('Selected records cleared successfully!');
+                updateEmployeeTable(); // Refresh the table after deletion
+            } catch (error) {
+                console.error('Error clearing records:', error);
+                alert('Error clearing records: ' + error.message);
+            } finally {
+                document.getElementById('selectAll').checked = false; // Uncheck select all
+            }
+        }
+
+        // Initial table load and search functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            updateEmployeeTable();
+            document.getElementById('searchInput').addEventListener('input', updateEmployeeTable);
         });
-
-        document.getElementById('employeeDetailContent').innerHTML = `
-            <div class="info-row">
-                <div class="info-item">
-                    <div class="info-label">Employee ID</div>
-                    <div class="info-value">${employeeId}</div>
-                </div>
-            </div>
-            <h3 style="margin: 2rem 0 1rem;">Attendance Records</h3>
-            ${Array.from(dayRecords.values()).reverse().map(record => `
-                <div class="time-record">
-                    <div>
-                        <div class="time-label">Date</div>
-                        <div class="time-value">${record.date}</div>
-                    </div>
-                    <div>
-                        <div class="time-label">Day</div>
-                        <div class="time-value">${record.day}</div>
-                    </div>
-                    <div>
-                        <div class="time-label">Punch In</div>
-                        <div class="time-value">${record.inTime || 'N/A'}</div>
-                    </div>
-                    <div>
-                        <div class="time-label">Punch Out</div>
-                        <div class="time-value">${record.outTime || 'N/A'}</div>
-                    </div>
-                    <div>
-                        <div class="time-label">Hours Worked</div>
-                        <div class="time-value">${formatHoursWorkedForDetails(record.hoursWorked)}</div>
-                    </div>
-                    <div>
-                        <div class="time-label">Attendance</div>
-                        <div class="time-value">${getAttendanceBadgeHTML(record.attendanceStatus)}</div>
-                    </div>
-                </div>
-            `).join('')}
-        `;
-
-        document.getElementById('employeeDetailOverlay').classList.add('active');
-        document.body.style.overflow = 'hidden';
-    } catch (err) {
-        console.error('Error fetching employee details:', err);
-        alert('Failed to load employee details. Please try again.');
-    }
-}
-
-// Hide employee detail overlay
-function hideEmployeeDetail() {
-    document.getElementById('employeeDetailOverlay').classList.remove('active');
-    document.body.style.overflow = '';
-}
-
-// Get latest status for an employee
-async function getLatestEmployeeStatus(employeeId, date) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/records?employeeId=${employeeId}&date=${formatDate(date)}`);
-        if (!response.ok) throw new Error('Failed to fetch records');
-        const records = await response.json();
-
-        if (records.length === 0) return null;
-
-        records.sort((a, b) => {
-            const timeA = new Date(`1970-01-01T${a.timestamp}Z`).getTime();
-            const timeB = new Date(`1970-01-01T${b.timestamp}Z`).getTime();
-            return timeB - timeA;
-        });
-
-        const latestRecord = records[0];
-        const result = {
-            id: employeeId,
-            status: latestRecord.status,
-            lastUpdate: latestRecord.timestamp,
-            date: formatDate(date),
-            hoursWorked: 'In Progress',
-            attendanceStatus: 'Pending'
-        };
-
-        const punchInRecord = records.find(r => r.status === 'in');
-        const punchOutRecord = records.find(r => r.status === 'out');
-
-        if (punchInRecord && punchOutRecord) {
-            const duration = calculateDuration(punchInRecord.timestamp, punchOutRecord.timestamp);
-            result.hoursWorked = duration !== 'N/A' ? duration : '0h 0m 0s';
-            result.attendanceStatus = getAttendanceStatus(duration);
-        } else if (!punchInRecord && !punchOutRecord) {
-            result.hoursWorked = '0h 0m 0s';
-            result.attendanceStatus = 'Absent';
-        }
-
-        return result;
-    } catch (err) {
-        console.error('Error fetching status:', err);
-        return null;
-    }
-}
-
-// Toggle select all checkboxes
-function toggleSelectAll() {
-    const selectAllCheckbox = document.getElementById('selectAll');
-    const checkboxes = document.querySelectorAll('.record-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = selectAllCheckbox.checked;
-    });
-}
-
-// Update employee table
-async function updateEmployeeTable() {
-    const searchQuery = document.getElementById('searchInput').value.trim();
-    const today = new Date().toLocaleDateString('en-CA');
-    const tableBody = document.getElementById('employeeTableBody');
-
-    try {
-        // Construct API URL with employeeId filter if searchQuery exists
-        const url = searchQuery
-            ? `${API_BASE_URL}/records?employeeId=${encodeURIComponent(searchQuery)}`
-            : `${API_BASE_URL}/records`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to fetch records');
-        }
-        const records = await response.json();
-
-        // If no records are returned, show "No Records Found"
-        if (records.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" class="no-records">
-                        <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                        No Records Found
-                    </td>
-                </tr>
-            `;
-            document.getElementById('selectAll').checked = false;
-            return;
-        }
-
-        // Get unique employee IDs
-        const employeeIds = [...new Set(records.map(record => record.employee_id))];
-        const latestRecords = [];
-
-        // Fetch latest status for each employee
-        for (const id of employeeIds) {
-            const status = await getLatestEmployeeStatus(id, today);
-            if (status) latestRecords.push(status);
-        }
-
-        // Sort records by employee ID for consistency
-        latestRecords.sort((a, b) => a.id.localeCompare(b.id));
-
-        // Render table rows
-        tableBody.innerHTML = latestRecords.map(record => `
-            <tr>
-                <td class="checkbox-cell"><input type="checkbox" class="record-checkbox select-checkbox" data-id="${record.id}"></td>
-                <td>${record.id}</td>
-                <td><span class="status-badge ${record.status === 'in' ? 'status-in' : 'status-out'}">
-                    ${record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                </span></td>
-                <td>${getAttendanceBadgeHTML(record.attendanceStatus)}</td>
-                <td>${record.lastUpdate}</td>
-                <td>${record.hoursWorked}</td>
-                <td>
-                    <button class="view-button" onclick="showEmployeeDetail('${record.id}')">
-                        <svg class="view-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                            <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                        View
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-
-        // Update select all checkbox
-        const checkboxes = document.querySelectorAll('.record-checkbox');
-        const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
-        document.getElementById('selectAll').checked = allChecked;
-    } catch (err) {
-        console.error('Error updating table:', err);
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="7" class="no-records">
-                    <svg class="no-records-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="12" y1="9" x2="12" y2="13"></line>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    ${err.message || 'Error Loading Records'}
-                </td>
-            </tr>
-        `;
-    }
-}
-
-// Show modal for clearing records
-function showModal() {
-    const selectedCheckboxes = document.querySelectorAll('.record-checkbox:checked');
-    if (selectedCheckboxes.length === 0) {
-        alert("Please select at least one record to delete.");
-        return;
-    }
-    const confirmClear = confirm(`Are you sure you want to permanently delete ${selectedCheckboxes.length} selected record(s)?`);
-    if (confirmClear) {
-        clearSelectedRecords();
-    }
-}
-
-// Clear selected records
-async function clearSelectedRecords() {
-    const selectedCheckboxes = document.querySelectorAll('.record-checkbox:checked');
-    const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.id);
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/records`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employeeIds: selectedIds })
-        });
-
-        if (!response.ok) throw new Error('Failed to delete records');
-        const data = await response.json();
-        alert(data.message);
-        updateEmployeeTable();
-    } catch (err) {
-        console.error('Error deleting records:', err);
-        alert('Failed to delete records. Please try again.');
-    }
-}
-
-// Event listeners for search input
-const searchInput = document.getElementById('searchInput');
-
-// Prevent non-alphanumeric keys and limit length
-searchInput.addEventListener('keydown', function(e) {
-    // Allow control keys (e.g., Backspace, Delete, Arrow keys)
-    if (e.ctrlKey || e.metaKey || e.key === 'Backspace' || e.key === 'Delete' ||
-        e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
-        return;
-    }
-    // Prevent non-alphanumeric characters
-    if (!/^[a-zA-Z0-9]$/.test(e.key)) {
-        e.preventDefault();
-    }
-    // Prevent input if length is already 7
-    if (this.value.length >= 7 && !e.key.includes('Arrow') && e.key !== 'Backspace' && e.key !== 'Delete') {
-        e.preventDefault();
-    }
-});
-
-// Validate and clean input on change
-searchInput.addEventListener('input', function() {
-    // Keep only alphanumeric characters
-    let cleanedValue = this.value.replace(/[^a-zA-Z0-9]/g, '');
-    // Limit to 7 characters
-    if (cleanedValue.length > 7) {
-        cleanedValue = cleanedValue.slice(0, 7);
-    }
-    this.value = cleanedValue;
-    updateEmployeeTable();
-});
-
-// Other event listeners
-document.getElementById('employeeDetailOverlay').addEventListener('click', function(e) {
-    if (e.target === this) hideEmployeeDetail();
-});
-
-// Initialize table on load
-updateEmployeeTable();
     </script>
 </body>
 </html>
