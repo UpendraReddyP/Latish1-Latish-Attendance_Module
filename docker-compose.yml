@@ -5,7 +5,7 @@ services:
     container_name: attendance_employee_portal
     build: ./Employee_Portal
     ports:
-      - "8083:80"
+      - "8164:80"
     depends_on:
       - backend
 
@@ -13,7 +13,7 @@ services:
     container_name: attendance_hr_portal
     build: ./HR_Portal
     ports:
-      - "8084:80"
+      - "8165:80"
     depends_on:
       - backend
 
@@ -21,12 +21,12 @@ services:
     container_name: attendance_backend
     build: ./Backend
     ports:
-      - "3067:3067"
+      - "3098:3098"
     depends_on:
       - postgres
     environment:
       - PGUSER=postgres
-      - PGPASSWORD=admin834
+      - PGPASSWORD=admin123
       - PGDATABASE=employee_attendance
       - PGHOST=postgres
       - PGPORT=5432
@@ -35,10 +35,10 @@ services:
     container_name: attendance_postgres
     image: postgres:14
     ports:
-      - "5465:5432"
+      - "5098:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin834
+      POSTGRES_PASSWORD: admin123
       POSTGRES_DB: employee_attendance
     volumes:
       - pgdata_attendance:/var/lib/postgresql/data
