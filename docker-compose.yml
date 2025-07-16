@@ -7,7 +7,10 @@ services:
     ports:
       - "8164:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
 
   hr_portal:
     container_name: attendance_hr_portal
@@ -15,7 +18,10 @@ services:
     ports:
       - "8165:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
 
   backend:
     container_name: attendance_backend
@@ -23,13 +29,22 @@ services:
     ports:
       - "3098:3098"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - PGUSER=postgres
       - PGPASSWORD=admin123
       - PGDATABASE=employee_attendance
       - PGHOST=postgres
       - PGPORT=5432
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - app-network
 
   postgres:
     container_name: attendance_postgres
@@ -43,7 +58,17 @@ services:
     volumes:
       - pgdata_attendance:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
 
 volumes:
   pgdata_attendance:
 
+networks:
+  app-network:
+    driver: bridge
