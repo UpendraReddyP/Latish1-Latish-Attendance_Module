@@ -191,7 +191,7 @@ pool.query('SELECT 1')
     .then(() => {
         console.log('✅ Database connected.');
         app.listen(port, () => {
-            console.log(`🚀 Server running at http://16.170.141.9:${port}`);
+            console.log(`🚀 Server running at http://13.51.85.176:${port}`);
         });
     })
     .catch(err => {
